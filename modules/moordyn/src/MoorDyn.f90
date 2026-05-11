@@ -122,13 +122,13 @@ CONTAINS
       CHARACTER(40)                :: DepthValue           ! Temporarily stores the optional WtrDpth setting for MD, which could be a number or a filename
       CHARACTER(40)                :: WaterKinValue        ! Temporarily stores the optional WaterKin setting for MD, which is typically a filename
       INTEGER(IntKi)               :: nOpts                ! number of options lines in input file
-      CHARACTER(40)                :: TempString1          !
-      CHARACTER(40)                :: TempString2          !
-      CHARACTER(40)                :: TempString3          !
-      CHARACTER(40)                :: TempString4          !
-      CHARACTER(40)                :: TempString5          !
-      CHARACTER(40)                :: TempString6          !
-      CHARACTER(40)                :: TempStrings(6)       ! Array of 6 strings used when parsing comma-separated items
+      CHARACTER(1024)              :: TempString1          !
+      CHARACTER(1024)              :: TempString2          !
+      CHARACTER(1024)              :: TempString3          !
+      CHARACTER(1024)              :: TempString4          !
+      CHARACTER(1024)              :: TempString5          !
+      CHARACTER(1024)              :: TempString6          !
+      CHARACTER(1024)              :: TempStrings(6)       ! Array of 6 strings used when parsing comma-separated items
 !      CHARACTER(1024)              :: FileName             !
       LOGICAL                      :: hasSyrope = .FALSE.  ! flag for if a line type has a Syrope model specified
       LOGICAL                      :: hasSyropeICs = .FALSE. ! flag for whether any line type uses Syrope model
@@ -159,8 +159,8 @@ CONTAINS
       CHARACTER(*), PARAMETER       :: RoutineName = 'MD_Init'
 
       ! for Syrope working curves
-      CHARACTER(40)                :: owcPath              !
-      CHARACTER(40)                :: wcFormula            !
+      CHARACTER(1024)              :: owcPath              !
+      CHARACTER(1024)              :: wcFormula            !
       REAL(DbKi)                   :: wcK1                 !
       REAL(DbKi)                   :: wcK2                 !
 
@@ -745,6 +745,9 @@ CONTAINS
                       read(tempStrings(3), *) m%LineTypeList(l)%vbeta
 
                       tempString6 = adjustl(tempString5(8:)) ! get the filepath of the SYROPE curves
+                      IF ( PathIsRelative( tempString6 ) ) THEN
+                         tempString6 = TRIM(p%PriPath)//TRIM(tempString6)
+                      END IF
                       
                       CALL MD_ReadSyropeWorkingCurves(tempString6, owcPath, wcFormula, wcK1, wcK2, ErrStat2, ErrMsg2)
                       IF (ErrStat2 >= AbortErrLev) THEN
@@ -771,7 +774,7 @@ CONTAINS
                       CALL getCoefficientOrCurve(owcPath, m%LineTypeList(l)%EA,  &
                                                            m%LineTypeList(l)%nEApoints, &
                                                            m%LineTypeList(l)%stiffXs,   &
-                                                           m%LineTypeList(l)%stiffYs,  ErrStat2, ErrMsg2)
+                                                           m%LineTypeList(l)%stiffYs,  ErrStat2, ErrMsg2, p%PriPath)
                       
                       hasSyrope = .false. ! reset hasSyrope flag for later use when processing
 
@@ -795,7 +798,7 @@ CONTAINS
                      CALL getCoefficientOrCurve(tempStrings(1), m%LineTypeList(l)%EA,     &
                                                             m%LineTypeList(l)%nEApoints, &
                                                             m%LineTypeList(l)%stiffXs,   &
-                                                            m%LineTypeList(l)%stiffYs,  ErrStat2, ErrMsg2)
+                                                            m%LineTypeList(l)%stiffYs,  ErrStat2, ErrMsg2, p%PriPath)
                    end if
 
                    
@@ -817,13 +820,13 @@ CONTAINS
                    CALL getCoefficientOrCurve(tempStrings(1), m%LineTypeList(l)%BA,     &
                                                            m%LineTypeList(l)%nBApoints,  &
                                                            m%LineTypeList(l)%dampXs,    &
-                                                           m%LineTypeList(l)%dampYs,   ErrStat2, ErrMsg2)
+                                                           m%LineTypeList(l)%dampYs,   ErrStat2, ErrMsg2, p%PriPath)
                                                            
                    ! process bending stiffness coefficients (which might use lookup tables)
                    CALL getCoefficientOrCurve(tempString3, m%LineTypeList(l)%EI,        &
                                                            m%LineTypeList(l)%nEIpoints, &
                                                            m%LineTypeList(l)%bstiffXs,  &
-                                                           m%LineTypeList(l)%bstiffYs, ErrStat2, ErrMsg2)
+                                                           m%LineTypeList(l)%bstiffYs, ErrStat2, ErrMsg2, p%PriPath)
 
                    ! specify IdNum of line type for error checking
                    m%LineTypeList(l)%IdNum = l  
@@ -5068,10 +5071,11 @@ SUBROUTINE MD_ReadSyropeWorkingCurves(inputString, owcPath, wcFormula, k1, k2, E
    CHARACTER(1024)                :: NextLine
    CHARACTER(64)                  :: OptString
    CHARACTER(256)                 :: OptValue
-   LOGICAL                        :: FoundOWC = .false.
-   LOGICAL                        :: FoundWCFormula = .false.
-   LOGICAL                        :: FoundK1 = .false.
-   LOGICAL                        :: FoundK2 = .false.
+   CHARACTER(256)                 :: Words(2)
+   LOGICAL                        :: FoundOWC
+   LOGICAL                        :: FoundWCFormula
+   LOGICAL                        :: FoundK1
+   LOGICAL                        :: FoundK2
    CHARACTER(*), PARAMETER        :: RoutineName = 'MD_ReadSyropeWorkingCurves'
 
    INTEGER(IntKi)                 :: i, ios
@@ -5085,6 +5089,10 @@ SUBROUTINE MD_ReadSyropeWorkingCurves(inputString, owcPath, wcFormula, k1, k2, E
    k2        = 0.0_DbKi
    ErrStat3  = ErrID_None
    ErrMsg3   = ''
+   FoundOWC = .false.
+   FoundWCFormula = .false.
+   FoundK1 = .false.
+   FoundK2 = .false.
 
    ! read file
    
@@ -5104,13 +5112,19 @@ SUBROUTINE MD_ReadSyropeWorkingCurves(inputString, owcPath, wcFormula, k1, k2, E
       NextLine = TRIM(FileInfo%Lines(i))
       IF (LEN_TRIM(NextLine) == 0) CYCLE
 
-      READ(NextLine, *, IOSTAT=ios) OptValue, OptString
-      IF (ios /= 0) THEN
+      OptValue = ''
+      OptString = ''
+      Words = ''
+      CALL GetWords(NextLine, Words, 2)
+      IF (LEN_TRIM(Words(1)) == 0 .OR. LEN_TRIM(Words(2)) == 0) THEN
          CALL SetErrStat(ErrID_Fatal, &
-            'Failed to read options in Syrope working curve file ' // TRIM(inputString) // '.', &
+            'Failed to read options in Syrope working curve file ' // TRIM(inputString) // &
+            '. Expected lines in the form "<value> <keyword>". Line was: ' // TRIM(NextLine), &
             ErrStat3, ErrMsg3, RoutineName)
          RETURN
       END IF
+      OptValue = TRIM(Words(1))
+      OptString = TRIM(Words(2))
 
       CALL Conv2UC(OptString)
 
