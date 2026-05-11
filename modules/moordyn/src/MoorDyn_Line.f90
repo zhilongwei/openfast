@@ -263,6 +263,8 @@ CONTAINS
             !CALL CleanUp()
             RETURN
          END IF
+         Line%Tmax = 0.0_DbKi
+         Line%Tmean = 0.0_DbKi
       end if
 
       ! allocate node force vectors
@@ -461,7 +463,12 @@ CONTAINS
                                              Line%dl_1(I), ErrStat2, ErrMsg2 )
             Line%dl_1(I) = Line%dl_1(I) * Line%l(I)
             IF (ErrStat2 /= ErrID_None) THEN
-               CALL SetErrStat(ErrStat2, ErrMsg2, ErrStat, ErrMsg, '')
+               CALL SetErrStat(ErrStat2, &
+                  'The Syrope slow spring strain is not a single-valued function of mean tension for Line '// &
+                  trim(Num2LStr(Line%IdNum))//', segment '//trim(Num2LStr(I))//'. '// &
+                  'The static stiffness on the working curve is smaller than the dynamic stiffness. '// &
+                  trim(ErrMsg2), &
+                  ErrStat, ErrMsg, '')
                RETURN
             END IF
          END DO
@@ -1467,6 +1474,21 @@ CONTAINS
             Xd( 6*N-6 + I) = ld_1
          
          else if (Line%ElasticMod == 4) then
+
+            if (Line%dl_1(I) < 0.0) then
+               CALL SetErrStat(ErrID_Fatal,"Syrope model: Slow spring stretch cannot be less than zero",ErrStat,ErrMsg,RoutineName)
+               return
+            end if
+
+            IF (Line%alphaMBL <= 0 .OR. Line%vbeta <= 0 .OR. Line%l(I) <= 0 .OR. Line%dl_1(I) <= 0) THEN
+               CALL SetErrStat(ErrID_Warn,"Syrope model: Assumptions violated",ErrStat,ErrMsg,RoutineName)
+               if (wordy > 2) then
+                  print *, "Line%alphaMBL", Line%alphaMBL
+                  print *, "Line%vbeta", Line%vbeta
+                  print *, "Line%l(I)", Line%l(I)
+                  print *, "Line%dl_1(I)", Line%dl_1(I)
+               endif
+            ENDIF
             
             dl = Line%lstr(I) - Line%l(I) ! delta l of this segment
 
@@ -1477,7 +1499,12 @@ CONTAINS
                                                 Line%dl_1(I) / Line%l(I), &
                                                 Line%Tmean(I), ErrStat2, ErrMsg2 )
                IF (ErrStat2 /= ErrID_None) THEN
-                  CALL SetErrStat(ErrStat2, ErrMsg2, ErrStat, ErrMsg, '')
+                  CALL SetErrStat(ErrStat2, &
+                     'The Syrope mean tension is not a single-valued function of slow spring strain for Line '// &
+                     trim(Num2LStr(Line%IdNum))//', segment '//trim(Num2LStr(I))//'. '// &
+                     'The static stiffness on the original working curve is smaller than the dynamic stiffness. '// &
+                     trim(ErrMsg2), &
+                     ErrStat, ErrMsg, '')
                   RETURN
                END IF
 
@@ -1502,7 +1529,12 @@ CONTAINS
                                                 Line%dl_1(I) / Line%l(I), &
                                                 Line%Tmean(I), ErrStat2, ErrMsg2 )
                IF (ErrStat2 /= ErrID_None) THEN
-                  CALL SetErrStat(ErrStat2, ErrMsg2, ErrStat, ErrMsg, '')
+                  CALL SetErrStat(ErrStat2, &
+                     'The Syrope slow spring strain is not a single-valued function of mean tension for Line '// &
+                     trim(Num2LStr(Line%IdNum))//', segment '//trim(Num2LStr(I))//'. '// &
+                     'The static stiffness on the working curve is smaller than the dynamic stiffness. '// &
+                     trim(ErrMsg2), &
+                     ErrStat, ErrMsg, '')
                   RETURN
                END IF
 
