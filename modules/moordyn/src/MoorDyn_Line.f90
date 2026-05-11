@@ -263,6 +263,8 @@ CONTAINS
             !CALL CleanUp()
             RETURN
          END IF
+         Line%Tmax = 0.0_DbKi
+         Line%Tmean = 0.0_DbKi
       end if
 
       ! allocate node force vectors
