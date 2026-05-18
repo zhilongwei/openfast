@@ -1818,10 +1818,16 @@ CONTAINS
 
                   DO il = 1, N
                      if (TempIDnums(il) >= 1 .and. TempIDnums(il) <= p%nLines) then      ! ensure line ID is in range
-                        DO j = 1, m%LineList(TempIDnums(il))%N
-                           m%LineList(TempIDnums(il))%Tmax(j) = Tmax0
-                           m%LineList(TempIDnums(il))%Tmean(j) = Tmean0
-                        END DO
+                        if (m%LineTypeList(m%LineList(TempIDnums(il))%PropsIdNum)%ElasticMod == 4) then ! ensure line type is Syrope
+                           DO j = 1, m%LineList(TempIDnums(il))%N
+                              m%LineList(TempIDnums(il))%Tmax(j) = Tmax0
+                              m%LineList(TempIDnums(il))%Tmean(j) = Tmean0
+                           END DO
+                        else
+                           CALL SetErrStat( ErrID_Fatal, ' Unable to parse Syrope line initial conditions '//trim(Num2LStr(l))//'. Line number '//TRIM(Int2LStr(TempIDnums(il)))//' does not use a Syrope line type.', ErrStat, ErrMsg, RoutineName )
+                           CALL CleanUp()
+                           return
+                        end if
                      else
                         CALL SetErrStat( ErrID_Fatal, ' Unable to parse Syrope line initial conditions '//trim(Num2LStr(l))//'. Line number '//TRIM(Int2LStr(TempIDnums(il)))//' out of bounds.', ErrStat, ErrMsg, RoutineName )
                         CALL CleanUp()

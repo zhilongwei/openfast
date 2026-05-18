@@ -466,7 +466,7 @@ CONTAINS
                CALL SetErrStat(ErrStat2, &
                   'The Syrope slow spring strain is not a single-valued function of mean tension for Line '// &
                   trim(Num2LStr(Line%IdNum))//', segment '//trim(Num2LStr(I))//'. '// &
-                  'The static stiffness on the working curve is smaller than the dynamic stiffness. '// &
+                  'The static stiffness on the working curve should be smaller than the dynamic stiffness. '// &
                   trim(ErrMsg2), &
                   ErrStat, ErrMsg, '')
                RETURN
