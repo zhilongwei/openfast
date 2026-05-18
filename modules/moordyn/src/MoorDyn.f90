@@ -163,6 +163,10 @@ CONTAINS
       CHARACTER(1024)              :: wcFormula            !
       REAL(DbKi)                   :: wcK1                 !
       REAL(DbKi)                   :: wcK2                 !
+      LOGICAL                      :: syropeDualDamping    !
+      REAL(DbKi)                   :: syropeOWCC2          !
+      REAL(DbKi)                   :: syropeWCC2           !
+      REAL(DbKi)                   :: dampingRatio         !
 
       ! for Syrope line initial conditions
       REAL(DbKi)                   :: Tmax0
@@ -749,7 +753,9 @@ CONTAINS
                          tempString6 = TRIM(p%PriPath)//TRIM(tempString6)
                       END IF
                       
-                      CALL MD_ReadSyropeWorkingCurves(tempString6, owcPath, wcFormula, wcK1, wcK2, ErrStat2, ErrMsg2)
+                      CALL MD_ReadSyropeWorkingCurves(tempString6, owcPath, wcFormula, wcK1, wcK2, &
+                                                      syropeDualDamping, syropeOWCC2, syropeWCC2, dampingRatio, &
+                                                      ErrStat2, ErrMsg2)
                       IF (ErrStat2 >= AbortErrLev) THEN
                          ErrMsg2 = 'Failed to read SYROPE working curves for line type '//trim(Num2LStr(l))//'.'//NewLine//TRIM(ErrMsg2)
                       END IF
@@ -769,6 +775,10 @@ CONTAINS
                       end if
                       m%LineTypeList(l)%syropeWCK1 = wcK1
                       m%LineTypeList(l)%syropeWCK2 = wcK2
+                      m%LineTypeList(l)%DualDamping = syropeDualDamping
+                      m%LineTypeList(l)%syropeOWCC2 = syropeOWCC2
+                      m%LineTypeList(l)%syropeWCC2 = syropeWCC2
+                      m%LineTypeList(l)%dampingRatio = dampingRatio
 
                       ! get the original working curve from the loopup table owcPath
                       CALL getCoefficientOrCurve(owcPath, m%LineTypeList(l)%EA,  &
@@ -5061,13 +5071,18 @@ SUBROUTINE MD_JacobianPConstrState( t, u, p, x, xd, z, OtherState, y, m, ErrStat
    END IF
 END SUBROUTINE MD_JacobianPConstrState
 
-SUBROUTINE MD_ReadSyropeWorkingCurves(inputString, owcPath, wcFormula, k1, k2, ErrStat3, ErrMsg3)
+SUBROUTINE MD_ReadSyropeWorkingCurves(inputString, owcPath, wcFormula, k1, k2, &
+                                      DualDamping, owcC2, wcC2, DampingRatio, ErrStat3, ErrMsg3)
 
    CHARACTER(*),      INTENT(IN)  :: inputString
    CHARACTER(*),      INTENT(OUT) :: owcPath
    CHARACTER(*),      INTENT(OUT) :: wcFormula
    REAL(DbKi),        INTENT(OUT) :: k1
    REAL(DbKi),        INTENT(OUT) :: k2
+   LOGICAL,           INTENT(OUT) :: DualDamping
+   REAL(DbKi),        INTENT(OUT) :: owcC2
+   REAL(DbKi),        INTENT(OUT) :: wcC2
+   REAL(DbKi),        INTENT(OUT) :: DampingRatio
 
    INTEGER(IntKi),    INTENT(OUT) :: ErrStat3
    CHARACTER(*),      INTENT(OUT) :: ErrMsg3
@@ -5077,11 +5092,16 @@ SUBROUTINE MD_ReadSyropeWorkingCurves(inputString, owcPath, wcFormula, k1, k2, E
    CHARACTER(1024)                :: NextLine
    CHARACTER(64)                  :: OptString
    CHARACTER(256)                 :: OptValue
+   CHARACTER(256)                 :: OptValueUC
    CHARACTER(256)                 :: Words(2)
    LOGICAL                        :: FoundOWC
    LOGICAL                        :: FoundWCFormula
    LOGICAL                        :: FoundK1
    LOGICAL                        :: FoundK2
+   LOGICAL                        :: FoundDualDamping
+   LOGICAL                        :: FoundOwcC2
+   LOGICAL                        :: FoundWcC2
+   LOGICAL                        :: FoundDampingRatio
    CHARACTER(*), PARAMETER        :: RoutineName = 'MD_ReadSyropeWorkingCurves'
 
    INTEGER(IntKi)                 :: i, ios
@@ -5093,13 +5113,20 @@ SUBROUTINE MD_ReadSyropeWorkingCurves(inputString, owcPath, wcFormula, k1, k2, E
    wcFormula = ''
    k1        = 0.0_DbKi
    k2        = 0.0_DbKi
+   DualDamping = .false.
+   owcC2     = 0.0_DbKi
+   wcC2      = 0.0_DbKi
+   DampingRatio = 0.0_DbKi
    ErrStat3  = ErrID_None
    ErrMsg3   = ''
    FoundOWC = .false.
    FoundWCFormula = .false.
    FoundK1 = .false.
    FoundK2 = .false.
-
+   FoundDualDamping = .false.
+   FoundOwcC2 = .false.
+   FoundWcC2 = .false.
+   FoundDampingRatio = .false.
    ! read file
    
    CALL ProcessComFile(inputString, FileInfo, ErrStat4, ErrMsg4)
@@ -5119,6 +5146,7 @@ SUBROUTINE MD_ReadSyropeWorkingCurves(inputString, owcPath, wcFormula, k1, k2, E
       IF (LEN_TRIM(NextLine) == 0) CYCLE
 
       OptValue = ''
+      OptValueUC = ''
       OptString = ''
       Words = ''
       CALL GetWords(NextLine, Words, 2)
@@ -5158,6 +5186,48 @@ SUBROUTINE MD_ReadSyropeWorkingCurves(inputString, owcPath, wcFormula, k1, k2, E
             RETURN
          END IF
          FoundK2 = .true.
+      ELSE IF (OptString == 'DUALDAMPING') THEN
+         OptValueUC = TRIM(OptValue)
+         CALL Conv2UC(OptValueUC)
+         FoundDualDamping = .TRUE.
+
+         IF (OptValueUC == 'TRUE' .OR. OptValueUC == 'T' .OR. OptValueUC == '.TRUE.') THEN
+            DualDamping = .TRUE.
+         ELSE IF (OptValueUC == 'FALSE' .OR. OptValueUC == 'F' .OR. OptValueUC == '.FALSE.') THEN
+            DualDamping = .FALSE.
+         ELSE
+            CALL SetErrStat(ErrID_Fatal, &
+               'Invalid DualDamping value in Syrope working curve file ' // TRIM(inputString) // '.', &
+               ErrStat3, ErrMsg3, RoutineName)
+            RETURN
+         END IF
+      ELSE IF (OptString == 'OWCDAMPING') THEN
+         READ(OptValue, *, IOSTAT=ios) owcC2
+         IF (ios /= 0) THEN
+            CALL SetErrStat(ErrID_Fatal, &
+               'Invalid OWCDamping value in Syrope working curve file ' // TRIM(inputString) // '.', &
+               ErrStat3, ErrMsg3, RoutineName)
+            RETURN
+         END IF
+         FoundOwcC2 = .TRUE.
+      ELSE IF (OptString == 'WCDAMPING') THEN
+         READ(OptValue, *, IOSTAT=ios) wcC2
+         IF (ios /= 0) THEN
+            CALL SetErrStat(ErrID_Fatal, &
+               'Invalid WCDamping value in Syrope working curve file ' // TRIM(inputString) // '.', &
+               ErrStat3, ErrMsg3, RoutineName)
+            RETURN
+         END IF
+         FoundWcC2 = .TRUE.
+      ELSE IF (OptString == 'DAMPINGRATIO') THEN
+         READ(OptValue, *, IOSTAT=ios) DampingRatio
+         IF (ios /= 0) THEN
+            CALL SetErrStat(ErrID_Fatal, &
+               'Invalid DampingRatio value in Syrope working curve file ' // TRIM(inputString) // '.', &
+               ErrStat3, ErrMsg3, RoutineName)
+            RETURN
+         END IF
+         FoundDampingRatio = .TRUE.
       ELSE
          CALL SetErrStat(ErrID_Warn, &
             'Unknown keyword "' // TRIM(OptString) // '" in Syrope working curve file ' // TRIM(inputString) // '.', &
@@ -5193,6 +5263,50 @@ SUBROUTINE MD_ReadSyropeWorkingCurves(inputString, owcPath, wcFormula, k1, k2, E
          'K2 option not found in Syrope working curve file ' // TRIM(inputString) // '.', &
          ErrStat3, ErrMsg3, RoutineName)
       RETURN
+   END IF
+
+   IF (DualDamping) THEN
+      IF (.NOT. FoundOwcC2) THEN
+         CALL SetErrStat(ErrID_Fatal, &
+            'OWCDamping option is required when DualDamping is enabled in Syrope working curve file ' // TRIM(inputString) // '.', &
+            ErrStat3, ErrMsg3, RoutineName)
+         RETURN
+      END IF
+
+      IF (.NOT. FoundWcC2) THEN
+         CALL SetErrStat(ErrID_Fatal, &
+            'WCDamping option is required when DualDamping is enabled in Syrope working curve file ' // TRIM(inputString) // '.', &
+            ErrStat3, ErrMsg3, RoutineName)
+         RETURN
+      END IF
+
+      IF (.NOT. FoundDampingRatio) THEN
+         CALL SetErrStat(ErrID_Fatal, &
+            'DampingRatio option is required when DualDamping is enabled in Syrope working curve file ' // TRIM(inputString) // '.', &
+            ErrStat3, ErrMsg3, RoutineName)
+         RETURN
+      END IF
+
+      IF (owcC2 <= 0.0_DbKi) THEN
+         CALL SetErrStat(ErrID_Fatal, &
+            'OWCC2 must be > 0 when DualDamping is enabled in Syrope working curve file ' // TRIM(inputString) // '.', &
+            ErrStat3, ErrMsg3, RoutineName)
+         RETURN
+      END IF
+
+      IF (wcC2 <= 0.0_DbKi) THEN
+         CALL SetErrStat(ErrID_Fatal, &
+            'WCC2 must be > 0 when DualDamping is enabled in Syrope working curve file ' // TRIM(inputString) // '.', &
+            ErrStat3, ErrMsg3, RoutineName)
+         RETURN
+      END IF
+
+      IF (dampingRatio <= 0.0_DbKi) THEN
+         CALL SetErrStat(ErrID_Fatal, &
+            'DampingRatio must be > 0 when DualDamping is enabled in Syrope working curve file ' // TRIM(inputString) // '.', &
+            ErrStat3, ErrMsg3, RoutineName)
+         RETURN
+      END IF
    END IF
 
    ! validate formula

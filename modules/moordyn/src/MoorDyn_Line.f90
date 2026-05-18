@@ -114,6 +114,10 @@ CONTAINS
          Line%syropeWCForm = LineProp%syropeWCForm
          line%syropeWCK1 = LineProp%syropeWCK1
          line%syropeWCK2 = LineProp%syropeWCK2
+         line%DualDamping = LineProp%DualDamping
+         line%syropeOWCC2 = LineProp%syropeOWCC2
+         line%syropeWCC2 = LineProp%syropeWCC2
+         line%dampingRatio = LineProp%dampingRatio
       endif
       
       Line%nBApoints = LineProp%nBApoints
@@ -1224,6 +1228,10 @@ CONTAINS
       CHARACTER(120)                   :: RoutineName = 'Line_GetStateDeriv'   
 
       Real(DbKi)                       :: dl_s           ! static stretch (both slow and fast components)
+      Real(DbKi)                       :: Tmean_max      ! maximum mean tension in the line
+      Integer(IntKi)                   :: I_maxTmean     ! index of segment with maximum mean tension
+      Real(DbKi)                       :: BA_Syrope      ! Static damping in the Syrope model
+      Real(DbKi)                       :: BA_D_Syrope    ! Dynamic damping in the Syrope model
 
       ErrStat = ErrID_None
       ErrMsg  = ""
@@ -1370,6 +1378,28 @@ CONTAINS
 
 
       ! ------------------  CALCULATE FORCES ON EACH NODE ----------------------------
+
+      ! For the Syrope model, if DualDamping is enabled, use different static damping on the original working curve and the working curves
+      if (Line%ElasticMod == 4 .AND. Line%DualDamping) then
+         ! Find the maximum mean tension
+         I_maxTmean = 1
+         Tmean_max = Line%Tmean(1)
+         do I=2, N
+            if (Line%Tmean(I) > Tmean_max) then
+               Tmean_max = Line%Tmean(I)
+               I_maxTmean = I
+            end if
+         end do
+
+         ! On the original working curve
+         if (EqualRealNos(Line%Tmax(I_maxTmean), Tmean_max)) then
+            BA_Syrope = Line%syropeOWCC2
+         else ! On the active working curve
+            BA_Syrope = Line%syropeWCC2
+         end if
+         BA_D_Syrope = BA_Syrope * Line%DampingRatio
+      end if
+
 
       ! loop through the segments
       DO I = 1, N
@@ -1554,8 +1584,13 @@ CONTAINS
                END IF
             endif
 
-            ld_1 = ((dl - dl_s * Line%l(I)) * (Line%alphaMBL + Line%vbeta * Line%Tmean(I)) + Line%BA_D * Line%lstrd(I)) / (Line%BA_D + Line%BA)
-            MagTd = Line%BA * ld_1 / Line%l(I)
+            if (.not. Line%DualDamping) then
+               ld_1 = ((dl - dl_s * Line%l(I)) * (Line%alphaMBL + Line%vbeta * Line%Tmean(I)) + Line%BA_D * Line%lstrd(I)) / (Line%BA_D + Line%BA)
+               MagTd = Line%BA * ld_1 / Line%l(I)
+            else
+               ld_1 = ((dl - dl_s * Line%l(I)) * (Line%alphaMBL + Line%vbeta * Line%Tmean(I)) + BA_D_Syrope * Line%lstrd(I)) / (BA_D_Syrope + BA_Syrope)
+               MagTd = BA_Syrope * ld_1 / Line%l(I)
+            end if
             Xd( 6*N-6 + I) = ld_1
 
             ! update Tmax and working curve if Tmean > Tmax

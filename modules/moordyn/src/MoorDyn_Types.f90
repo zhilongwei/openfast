@@ -99,6 +99,10 @@ IMPLICIT NONE
     INTEGER(IntKi)  :: syropeWCForm = 0_IntKi      !< Syrope working curve formula (1 = LINEAR, 2 = QUADRATIC, 3 = EXP) [-]
     REAL(DbKi)  :: syropeWCK1 = 0.0_R8Ki      !< Coefficient for the Syrope working curve formula [-]
     REAL(DbKi)  :: syropeWCK2 = 0.0_R8Ki      !< Coefficient for the Syrope working curve formula [-]
+    LOGICAL  :: DualDamping = .false.      !< Different static dampings for the original working curve and working curve in Syrope model [-]
+    REAL(DbKi)  :: syropeOWCC2 = 0.0_R8Ki      !< Static damping for the original working curve in Syrope model [[N-s]]
+    REAL(DbKi)  :: syropeWCC2 = 0.0_R8Ki      !< Static damping for the working curves in Syrope model [[N-s]]
+    REAL(DbKi)  :: DampingRatio = 0.0_R8Ki      !< fast spring damping relative to the slow spring damping in the Syrope model [[-]]
   END TYPE MD_LineProp
 ! =======================
 ! =========  MD_RodProp  =======
@@ -314,6 +318,10 @@ IMPLICIT NONE
     INTEGER(IntKi)  :: syropeWCForm = 0_IntKi      !< Syrope working curve formula (1 = LINEAR, 2 = QUADRATIC, 3 = EXP) [-]
     REAL(DbKi)  :: syropeWCK1 = 0.0_R8Ki      !< Coefficient for the Syrope working curve formula [-]
     REAL(DbKi)  :: syropeWCK2 = 0.0_R8Ki      !< Coefficient for the Syrope working curve formula [-]
+    LOGICAL  :: DualDamping = .false.      !< Different static dampings for the original working curve and working curve in Syrope model [-]
+    REAL(DbKi)  :: syropeOWCC2 = 0.0_R8Ki      !< Static damping for the original working curve in Syrope model [[N-s]]
+    REAL(DbKi)  :: syropeWCC2 = 0.0_R8Ki      !< Static damping for the working curves in Syrope model [[N-s]]
+    REAL(DbKi)  :: DampingRatio = 0.0_R8Ki      !< fast spring damping relative to the slow spring damping in the Syrope model [[-]]
     REAL(DbKi) , DIMENSION(:), ALLOCATABLE  :: Tmax      !< segment preceding highest mean tensions [[N]]
     REAL(DbKi) , DIMENSION(:), ALLOCATABLE  :: Tmean      !< segment mean tensions [[N]]
     REAL(DbKi) , DIMENSION(:,:), ALLOCATABLE  :: W      !< weight/buoyancy vectors [[N]]
@@ -812,6 +820,10 @@ subroutine MD_CopyLineProp(SrcLinePropData, DstLinePropData, CtrlCode, ErrStat, 
    DstLinePropData%syropeWCForm = SrcLinePropData%syropeWCForm
    DstLinePropData%syropeWCK1 = SrcLinePropData%syropeWCK1
    DstLinePropData%syropeWCK2 = SrcLinePropData%syropeWCK2
+   DstLinePropData%DualDamping = SrcLinePropData%DualDamping
+   DstLinePropData%syropeOWCC2 = SrcLinePropData%syropeOWCC2
+   DstLinePropData%syropeWCC2 = SrcLinePropData%syropeWCC2
+   DstLinePropData%DampingRatio = SrcLinePropData%DampingRatio
 end subroutine
 
 subroutine MD_DestroyLineProp(LinePropData, ErrStat, ErrMsg)
@@ -859,6 +871,10 @@ subroutine MD_PackLineProp(RF, Indata)
    call RegPack(RF, InData%syropeWCForm)
    call RegPack(RF, InData%syropeWCK1)
    call RegPack(RF, InData%syropeWCK2)
+   call RegPack(RF, InData%DualDamping)
+   call RegPack(RF, InData%syropeOWCC2)
+   call RegPack(RF, InData%syropeWCC2)
+   call RegPack(RF, InData%DampingRatio)
    if (RegCheckErr(RF, RoutineName)) return
 end subroutine
 
@@ -898,6 +914,10 @@ subroutine MD_UnPackLineProp(RF, OutData)
    call RegUnpack(RF, OutData%syropeWCForm); if (RegCheckErr(RF, RoutineName)) return
    call RegUnpack(RF, OutData%syropeWCK1); if (RegCheckErr(RF, RoutineName)) return
    call RegUnpack(RF, OutData%syropeWCK2); if (RegCheckErr(RF, RoutineName)) return
+   call RegUnpack(RF, OutData%DualDamping); if (RegCheckErr(RF, RoutineName)) return
+   call RegUnpack(RF, OutData%syropeOWCC2); if (RegCheckErr(RF, RoutineName)) return
+   call RegUnpack(RF, OutData%syropeWCC2); if (RegCheckErr(RF, RoutineName)) return
+   call RegUnpack(RF, OutData%DampingRatio); if (RegCheckErr(RF, RoutineName)) return
 end subroutine
 
 subroutine MD_CopyRodProp(SrcRodPropData, DstRodPropData, CtrlCode, ErrStat, ErrMsg)
@@ -2042,6 +2062,10 @@ subroutine MD_CopyLine(SrcLineData, DstLineData, CtrlCode, ErrStat, ErrMsg)
    DstLineData%syropeWCForm = SrcLineData%syropeWCForm
    DstLineData%syropeWCK1 = SrcLineData%syropeWCK1
    DstLineData%syropeWCK2 = SrcLineData%syropeWCK2
+   DstLineData%DualDamping = SrcLineData%DualDamping
+   DstLineData%syropeOWCC2 = SrcLineData%syropeOWCC2
+   DstLineData%syropeWCC2 = SrcLineData%syropeWCC2
+   DstLineData%DampingRatio = SrcLineData%DampingRatio
    if (allocated(SrcLineData%Tmax)) then
       LB(1:1) = lbound(SrcLineData%Tmax)
       UB(1:1) = ubound(SrcLineData%Tmax)
@@ -2450,6 +2474,10 @@ subroutine MD_PackLine(RF, Indata)
    call RegPack(RF, InData%syropeWCForm)
    call RegPack(RF, InData%syropeWCK1)
    call RegPack(RF, InData%syropeWCK2)
+   call RegPack(RF, InData%DualDamping)
+   call RegPack(RF, InData%syropeOWCC2)
+   call RegPack(RF, InData%syropeWCC2)
+   call RegPack(RF, InData%DampingRatio)
    call RegPackAlloc(RF, InData%Tmax)
    call RegPackAlloc(RF, InData%Tmean)
    call RegPackAlloc(RF, InData%W)
@@ -2547,6 +2575,10 @@ subroutine MD_UnPackLine(RF, OutData)
    call RegUnpack(RF, OutData%syropeWCForm); if (RegCheckErr(RF, RoutineName)) return
    call RegUnpack(RF, OutData%syropeWCK1); if (RegCheckErr(RF, RoutineName)) return
    call RegUnpack(RF, OutData%syropeWCK2); if (RegCheckErr(RF, RoutineName)) return
+   call RegUnpack(RF, OutData%DualDamping); if (RegCheckErr(RF, RoutineName)) return
+   call RegUnpack(RF, OutData%syropeOWCC2); if (RegCheckErr(RF, RoutineName)) return
+   call RegUnpack(RF, OutData%syropeWCC2); if (RegCheckErr(RF, RoutineName)) return
+   call RegUnpack(RF, OutData%DampingRatio); if (RegCheckErr(RF, RoutineName)) return
    call RegUnpackAlloc(RF, OutData%Tmax); if (RegCheckErr(RF, RoutineName)) return
    call RegUnpackAlloc(RF, OutData%Tmean); if (RegCheckErr(RF, RoutineName)) return
    call RegUnpackAlloc(RF, OutData%W); if (RegCheckErr(RF, RoutineName)) return

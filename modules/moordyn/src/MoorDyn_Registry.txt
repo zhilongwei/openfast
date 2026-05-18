@@ -86,6 +86,10 @@ typedef  ^            ^                DbKi               bstiffYs {MD_MaxNCoef}
 typedef  ^            ^                IntKi              syropeWCForm   -       -  -   "Syrope working curve formula (1 = LINEAR, 2 = QUADRATIC, 3 = EXP)"
 typedef  ^            ^                DbKi               syropeWCK1     -       -  -   "Coefficient for the Syrope working curve formula"
 typedef  ^            ^                DbKi               syropeWCK2     -       -  -   "Coefficient for the Syrope working curve formula"
+typedef  ^            ^                LOGICAL            DualDamping    -       -  -   "Different static dampings for the original working curve and working curve in Syrope model"
+typedef  ^            ^                DbKi               syropeOWCC2    -       -  -   "Static damping for the original working curve in Syrope model" "[N-s]"
+typedef  ^            ^                DbKi               syropeWCC2     -       -  -   "Static damping for the working curves in Syrope model" "[N-s]"
+typedef  ^            ^                DbKi               DampingRatio   -       -  -   "fast spring damping relative to the slow spring damping in the Syrope model"  "[-]"
 
 # rod properties from rod dictionary input
 typedef  ^            MD_RodProp       IntKi              IdNum          -       -  -   "integer identifier of this set of rod properties"
@@ -293,6 +297,10 @@ typedef  ^            ^                DbKi               Td           {:}{:}   
 typedef  ^            ^                IntKi              syropeWCForm  -        -  -   "Syrope working curve formula (1 = LINEAR, 2 = QUADRATIC, 3 = EXP)"
 typedef  ^            ^                DbKi               syropeWCK1    -        -  -   "Coefficient for the Syrope working curve formula"
 typedef  ^            ^                DbKi               syropeWCK2    -        -  -   "Coefficient for the Syrope working curve formula"
+typedef  ^            ^                LOGICAL            DualDamping   -       -  -   "Different static dampings for the original working curve and working curve in Syrope model"
+typedef  ^            ^                DbKi               syropeOWCC2   -       -  -   "Static damping for the original working curve in Syrope model" "[N-s]"
+typedef  ^            ^                DbKi               syropeWCC2    -       -  -   "Static damping for the working curves in Syrope model" "[N-s]"
+typedef  ^            ^                DbKi               DampingRatio  -       -  -   "fast spring damping relative to the slow spring damping in the Syrope model"  "[-]"
 typedef  ^            ^                DbKi               Tmax         {:}       -  -   "segment preceding highest mean tensions"  "[N]"
 typedef  ^            ^                DbKi               Tmean        {:}       -  -   "segment mean tensions"  "[N]"
 typedef  ^            ^                DbKi               W            {:}{:}    -  -   "weight/buoyancy vectors"  "[N]"
